@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<qnx xmlns="http://www.qnx.com/schemas/application/1.0">
+    <id>com.example.QMLBB</id>
+    <name>SQL Terminal</name>
+    <versionNumber>0.1.0</versionNumber>
+    <description>Command-line database interface</description>
+    <initialWindow>
+        <autoOrients>true</autoOrients>
+        <systemChrome>none</systemChrome>
+        <transparent>false</transparent>
+    </initialWindow>
+    <author>Andrej Repisky</author>
+    <copyright>COPYRIGHT</copyright>
+    <env value="app/native/imports:/usr/lib/qt4/imports" var="QML_IMPORT_PATH"/>
+    <env value="app/native/plugins:/usr/lib/qt4/plugins" var="QT_PLUGIN_PATH"/>
+    <env value="app/native/lib:/usr/lib/qt4/lib/" var="LD_LIBRARY_PATH"/>
+    <arg>-style</arg>
+    <arg>qnxlight</arg>
+    <permission>access_shared</permission>
+    <action system="true">run_native</action>
+    <!-- QMLBB should point to the project binary, path can be relative -->
+    <asset path="QMLBB" type="Qnx/Elf" entry="true">QMLBB</asset>
+    <asset path="./qml">qml</asset>
+    <asset path="../SQLTerminal/icon_114_x_114.png">icon_114_x_114.png</asset>
+    <authorId>gYAAgCjILo4WHq9BqffLHnIzv0s</authorId>
+    <icon>
+        <image>icon_114_x_114.png</image>
+    </icon>
+</qnx>
