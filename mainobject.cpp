@@ -105,7 +105,7 @@ void MainObject::createDBConnection()
 //	console << QDir::homePath();
 //	qDebug() << db.isValid();
 #ifdef Q_OS_SYMBIAN
-	db.setDatabaseName("F:\\Documents\\sql_terminal.db");
+    db.setDatabaseName("E:\\Others\\sql_terminal.db");
 #else
 	db.setDatabaseName("./shared/documents/sql_terminal.db");
 #endif

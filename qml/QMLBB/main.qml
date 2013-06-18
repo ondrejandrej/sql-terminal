@@ -189,8 +189,16 @@ Rectangle {
     Rectangle {		// Quick and dirty fix to lift inputLine above virtual keyboard on BlackBerry 10.1 onwards
         id: dummyRect
         anchors.bottom: parent.bottom
-		height: inputLine.focus ? (parent.height === 1280 ? 525 : 385) : 0
+//		height: inputLine.focus ? (parent.height === 1280 ? 525 : 385) : 0
+		height: inputLine.focus ? transformHeight(parent.height) : 0
         width: parent.width
+		function transformHeight(_height) {
+			if(_height === 1280)
+				return 525	// height of virtual keyboard on Z10 in portrait
+			if(_height === 768)
+				return 385	// height of virtual keyboard on Z10 in landscape
+			return 0	// for phones other than Z10, don't lift inputLine
+		}
     }
 }
 
