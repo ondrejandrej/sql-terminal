@@ -6,3 +6,5 @@ SQL Terminal provides a command-line interface to SQLite database engine. It all
 It's available on Blackberry 10 and Symbian Belle.
 
 For screenshots, go to http://appworld.blackberry.com/webstore/content/28054865/
+
+Note to Symbian users: to install the app, download sql-terminal/symbian/SQLTerm.sis and transfer it to your phone.
