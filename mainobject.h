@@ -20,6 +20,7 @@ signals:
     
 public slots:
 	void processCommand(QString prompt, QString command);
+	void loadData(QString fileName);
     
 private:
     QFont baseFont;
@@ -47,6 +48,7 @@ private:
 		}
 		cmdHistory.setData(settings.value("Command history").toStringList());
 	}
+	QTimer *timer;
 };
 
 #endif // MAINOBJECT_H

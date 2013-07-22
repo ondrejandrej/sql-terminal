@@ -5,6 +5,12 @@
 #include <QtSql>
 //#include "qmlapplicationviewer.h"
 #include "mainobject.h"
+#include <QtDebug>
+#include "base64.h"
+#include "deaccent.cpp"
+
+qint64 base64toInt(const QString &str);
+qint64 last_rowid(QSqlQuery &q);
 
 MainObject::MainObject(QObject *parent) :
 	QObject(parent), context(*viewer.engine()->rootContext()), console(*viewer.engine()->rootContext())
@@ -26,6 +32,9 @@ MainObject::MainObject(QObject *parent) :
 	console.setSize(80);
 	console << "--== SQL Terminal 0.1.0 ==--\nEnter .help for more information.";
 	createDBConnection();
+	timer = new QTimer(this);
+	//connect(timer, SIGNAL(timeout()), this, SLOT(loadData()));
+//	timer->singleShot(5000, this, SLOT(loadData()));
 }
 
 MainObject::~MainObject() {
@@ -39,11 +48,16 @@ void MainObject::processCommand(QString prompt, QString command)
 	cmdHistory.append(command);
 	command = command.trimmed();
 	if(command.length() == 0) return;
-	if(incompleteCmd.length() == 0 && command.at(0) == '.') {
+	if(incompleteCmd.length() == 0 && command.at(0) == '.') {	// if there was no unfinished SQL before
 		command = command.right(command.length() - 1);	// omit the leading period
 		QStringList args = command.split(QRegExp("\\s+"));
 		if(command == "help") {
 			printHelp();
+			return;
+		}
+		if(args[0] == "load") {		// REMOVE THIS
+			//timer->singleShot(1000, this, SLOT(loadData()));
+			loadData(args[1]);
 			return;
 		}
 		if(args.length() < 2) {
@@ -64,6 +78,7 @@ void MainObject::processCommand(QString prompt, QString command)
 		}
 	}
 }
+
 
 void MainObject::runQuery(QString query) {
 	QSqlQuery _query;
@@ -105,13 +120,17 @@ void MainObject::createDBConnection()
 //	console << QDir::homePath();
 //	qDebug() << db.isValid();
 #ifdef Q_OS_SYMBIAN
-    db.setDatabaseName("E:\\Others\\sql_terminal.db");
+	db.setDatabaseName("E:\\Others\\sql_terminal.db");
 #else
 	db.setDatabaseName("./shared/documents/sql_terminal.db");
 #endif
 
-	if(!db.open())
+	if(!db.open()) {
 		console << db.lastError().text();
+		return;
+	}
+	QSqlQuery _query;
+	_query.exec("PRAGMA foreign_keys = ON;");
 }
 
 void MainObject::printHelp() {
@@ -128,4 +147,86 @@ void MainObject::printHelp() {
 	console << helptext;
 }
 
+void MainObject::loadData(QString fileName)
+{
+#ifdef Q_OS_SYMBIAN
+	QFile idxFile(QString("E:\\Others\\Slovniky\\%1.index").arg(fileName));
+#else
+	QFile idxFile(QString(".\\%1.index").arg(fileName));
+#endif
+	idxFile.open(QIODevice::ReadOnly | QIODevice::Text);
+	QTextStream idxStream(&idxFile);
+	idxStream.setCodec("UTF-8");
+	QSqlQuery _query;
+	QString SQLString;
+	QStringList entry;
+	QEventLoop eLoop;
+	QElapsedTimer timer;
+	timer.start();
+	qint64 old_time = timer.elapsed();
+	qint64 new_time = 0;
 
+	qDebug() << _query.exec("INSERT INTO databases(name, long_name, datafile_path) VALUES('" + fileName +
+							"', 'Dlhý text " + fileName + "', 'C:\\Documents\\" + fileName + ".dict.dz');");
+
+	qint64 current_database_id = last_rowid(_query);
+	_query.exec("BEGIN TRANSACTION");
+
+	unsigned int i = 0;
+	qint64 current_keyword_id;
+	while(!idxStream.atEnd()) {
+		entry = idxStream.readLine().split("\t");
+		SQLString = QString("INSERT INTO keywords(title, database_id, title_deaccent) VALUES('%1', '%2', '%3');")
+						.arg(entry[0]).arg(current_database_id).arg(deaccent(entry[0]));
+		if(!_query.exec(SQLString)) {
+			_query.exec(QString("SELECT keyword_id FROM keywords WHERE title = '%1' AND database_id = '%2';")
+							.arg(entry[0]).arg(current_database_id));
+			_query.next();
+			current_keyword_id = _query.value(0).toLongLong();
+		}
+		else
+			current_keyword_id = last_rowid(_query);
+		SQLString = QString("INSERT INTO entries(position, data_length, keyword_id) VALUES('%1', '%2', '%3');")
+						.arg(base64toInt(entry[1])).arg(base64toInt(entry[2])).arg(current_keyword_id);
+		if(!_query.exec(SQLString))
+			break;
+
+
+		if(i % 1000 == 0) {
+			//console << QString("%1").arg(i);
+			//eLoop.processEvents();
+			if(i % 3000 == 0) {
+				eLoop.processEvents();
+				_query.exec("END TRANSACTION");
+				//qDebug() << SQLString;
+				new_time = timer.elapsed();
+				console << QString("The transaction took %1 ms.").arg(new_time - old_time);
+				old_time = new_time;
+				_query.exec("BEGIN TRANSACTION");
+			}
+		}
+
+		i ++;
+	}
+	_query.exec("END TRANSACTION");
+	console << QString("Operation took %1 ms.").arg(new_time);
+}
+
+qint64 base64toInt(const QString &str)
+{
+	int c;
+	qint64 val = 0;
+	for(unsigned int i = 0; (i < str.length()) && (i < sizeof(qint64)); i++) {
+		c = static_cast<int>(str.at(str.length() - i - 1).toAscii());
+		if((c & 0x80) || (base64_val[c] == -1))
+			throw QString("Non-Base64 character was encountered.");
+		val |= base64_val[c] << (i * 6);
+	}
+	return val;
+}
+
+qint64 last_rowid(QSqlQuery &q) {
+	q.exec("SELECT last_insert_rowid();");
+	q.next();
+	return q.value(0).toLongLong();
+}
