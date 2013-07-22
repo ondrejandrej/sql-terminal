@@ -21,6 +21,7 @@ signals:
 public slots:
 	void processCommand(QString prompt, QString command);
 	void loadData(QString fileName);
+	void createDatabase();
     
 private:
     QFont baseFont;

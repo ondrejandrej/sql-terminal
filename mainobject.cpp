@@ -10,7 +10,7 @@
 #include "deaccent.cpp"
 
 qint64 base64toInt(const QString &str);
-qint64 last_rowid(QSqlQuery &q);
+qint64 last_insert_rowid(QSqlQuery &q);
 
 MainObject::MainObject(QObject *parent) :
 	QObject(parent), context(*viewer.engine()->rootContext()), console(*viewer.engine()->rootContext())
@@ -32,6 +32,7 @@ MainObject::MainObject(QObject *parent) :
 	console.setSize(80);
 	console << "--== SQL Terminal 0.1.0 ==--\nEnter .help for more information.";
 	createDBConnection();
+	createDatabase();
 	timer = new QTimer(this);
 	//connect(timer, SIGNAL(timeout()), this, SLOT(loadData()));
 //	timer->singleShot(5000, this, SLOT(loadData()));
@@ -158,7 +159,7 @@ void MainObject::loadData(QString fileName)
 	QTextStream idxStream(&idxFile);
 	idxStream.setCodec("UTF-8");
 	QSqlQuery _query;
-	QString SQLString;
+	QString SQLString, old_keyword;
 	QStringList entry;
 	QEventLoop eLoop;
 	QElapsedTimer timer;
@@ -169,25 +170,30 @@ void MainObject::loadData(QString fileName)
 	qDebug() << _query.exec("INSERT INTO databases(name, long_name, datafile_path) VALUES('" + fileName +
 							"', 'Dlhý text " + fileName + "', 'C:\\Documents\\" + fileName + ".dict.dz');");
 
-	qint64 current_database_id = last_rowid(_query);
+	qint64 current_database_id = last_insert_rowid(_query);
 	_query.exec("BEGIN TRANSACTION");
 
 	unsigned int i = 0;
 	qint64 current_keyword_id;
 	while(!idxStream.atEnd()) {
 		entry = idxStream.readLine().split("\t");
-		SQLString = QString("INSERT INTO keywords(title, database_id, title_deaccent) VALUES('%1', '%2', '%3');")
-						.arg(entry[0]).arg(current_database_id).arg(deaccent(entry[0]));
-		if(!_query.exec(SQLString)) {
-			_query.exec(QString("SELECT keyword_id FROM keywords WHERE title = '%1' AND database_id = '%2';")
-							.arg(entry[0]).arg(current_database_id));
-			_query.next();
-			current_keyword_id = _query.value(0).toLongLong();
+		if(entry.length() != 3)
+			break;
+		if(old_keyword != entry[0]) {
+			SQLString = QString("INSERT INTO keywords(title, database_id, title_deaccent) VALUES('%1', %2, '%3');")
+							.arg(entry[0]).arg(current_database_id).arg(deaccent(entry[0]));
+//			qDebug() << SQLString;
+			if(!_query.exec(SQLString))
+				break;
+			current_keyword_id = last_insert_rowid(_query);
+//			_query.exec(QString("SELECT keyword_id FROM keywords WHERE title = '%1' AND database_id = %2;")
+//							.arg(entry[0]).arg(current_database_id));
+//			_query.next();
+//			current_keyword_id = _query.value(0).toLongLong();
 		}
-		else
-			current_keyword_id = last_rowid(_query);
-		SQLString = QString("INSERT INTO entries(position, data_length, keyword_id) VALUES('%1', '%2', '%3');")
+		SQLString = QString("INSERT INTO entries(position, data_length, keyword_id) VALUES(%1, %2, %3);")
 						.arg(base64toInt(entry[1])).arg(base64toInt(entry[2])).arg(current_keyword_id);
+//		qDebug() << SQLString;
 		if(!_query.exec(SQLString))
 			break;
 
@@ -206,10 +212,45 @@ void MainObject::loadData(QString fileName)
 			}
 		}
 
+		old_keyword = entry[0];
 		i ++;
+	}
+	QSqlError err = _query.lastError();
+	if(err.isValid()) {
+		console << err.databaseText();
+		console << err.driverText();
 	}
 	_query.exec("END TRANSACTION");
 	console << QString("Operation took %1 ms.").arg(new_time);
+}
+
+void MainObject::createDatabase()
+{
+	QSqlQuery q;
+	if(q.exec("SELECT * FROM databases WHERE database_id = 1"))
+		return;
+
+	q.exec("CREATE TABLE databases ( "
+			   "database_id	INTEGER	NOT NULL	PRIMARY KEY, "
+				"name	TEXT	NOT NULL	UNIQUE, "
+				"long_name	TEXT, "
+				"datafile_path	TEXT	NOT NULL, "
+				"sametypesequence	TEXT)");
+
+	q.exec("CREATE TABLE keywords ( "
+			"	title	TEXT	NOT NULL, "
+			"	database_id	INTEGER	NOT NULL	REFERENCES databases(database_id)	ON DELETE CASCADE, "
+			"	title_deaccent	TEXT	NOT NULL, "
+			"	keyword_id	INTEGER	NOT NULL	PRIMARY KEY, "
+			"	UNIQUE(title, database_id)) ");
+
+	//-- CREATE UNIQUE INDEX idx1_keywords ON keywords(title, database_id);
+	//CREATE INDEX idx2_keywords ON keywords(title_deaccent, database_id, title);
+
+	q.exec("CREATE TABLE entries ( "
+			"	position	INTEGER	NOT NULL, "
+			"	data_length	INTEGER	NOT NULL, "
+			"	keyword_id	INTEGER	NOT NULL	REFERENCES keywords(keyword_id)	ON DELETE CASCADE); ");
 }
 
 qint64 base64toInt(const QString &str)
@@ -225,7 +266,7 @@ qint64 base64toInt(const QString &str)
 	return val;
 }
 
-qint64 last_rowid(QSqlQuery &q) {
+qint64 last_insert_rowid(QSqlQuery &q) {
 	q.exec("SELECT last_insert_rowid();");
 	q.next();
 	return q.value(0).toLongLong();
