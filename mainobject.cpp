@@ -57,8 +57,9 @@ void MainObject::processCommand(QString prompt, QString command)
 			return;
 		}
 		if(args[0] == "load") {		// REMOVE THIS
-			//timer->singleShot(1000, this, SLOT(loadData()));
-			loadData(args[1]);
+			index_to_load = args[1];
+			timer->singleShot(1000, this, SLOT(loadData()));
+			//loadData(args[1]);
 			return;
 		}
 		if(args.length() < 2) {
@@ -148,8 +149,9 @@ void MainObject::printHelp() {
 	console << helptext;
 }
 
-void MainObject::loadData(QString fileName)
+void MainObject::loadData()
 {
+	QString fileName = index_to_load;
 #ifdef Q_OS_SYMBIAN
 	QFile idxFile(QString("E:\\Others\\Slovniky\\%1.index").arg(fileName));
 #else
@@ -174,22 +176,18 @@ void MainObject::loadData(QString fileName)
 	_query.exec("BEGIN TRANSACTION");
 
 	unsigned int i = 0;
-	qint64 current_keyword_id;
+	qint64 current_keyword_id = 0;
 	while(!idxStream.atEnd()) {
 		entry = idxStream.readLine().split("\t");
 		if(entry.length() != 3)
 			break;
 		if(old_keyword != entry[0]) {
 			SQLString = QString("INSERT INTO keywords(title, database_id, title_deaccent) VALUES('%1', %2, '%3');")
-							.arg(entry[0]).arg(current_database_id).arg(deaccent(entry[0]));
+							.arg(entry[0]).arg(current_database_id).arg(deaccent(entry[0]));	// TBD: toLower()
 //			qDebug() << SQLString;
 			if(!_query.exec(SQLString))
 				break;
 			current_keyword_id = last_insert_rowid(_query);
-//			_query.exec(QString("SELECT keyword_id FROM keywords WHERE title = '%1' AND database_id = %2;")
-//							.arg(entry[0]).arg(current_database_id));
-//			_query.next();
-//			current_keyword_id = _query.value(0).toLongLong();
 		}
 		SQLString = QString("INSERT INTO entries(position, data_length, keyword_id) VALUES(%1, %2, %3);")
 						.arg(base64toInt(entry[1])).arg(base64toInt(entry[2])).arg(current_keyword_id);
@@ -198,15 +196,16 @@ void MainObject::loadData(QString fileName)
 			break;
 
 
-		if(i % 1000 == 0) {
+		if(i % 100 == 0) {
 			//console << QString("%1").arg(i);
-			//eLoop.processEvents();
+			eLoop.processEvents();
 			if(i % 3000 == 0) {
-				eLoop.processEvents();
+				console << QString("%1").arg(i);
+				//eLoop.processEvents();
 				_query.exec("END TRANSACTION");
 				//qDebug() << SQLString;
 				new_time = timer.elapsed();
-				console << QString("The transaction took %1 ms.").arg(new_time - old_time);
+				console << QString("%1 ms").arg(new_time - old_time);
 				old_time = new_time;
 				_query.exec("BEGIN TRANSACTION");
 			}
